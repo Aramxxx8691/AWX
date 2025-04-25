@@ -5,19 +5,32 @@ services:
   grafana:
     image: grafana/grafana:latest
     container_name: grafana
-    environment:
-      - GF_SECURITY_ADMIN_PASSWORD=admin
+    env_file:
+      - .env
     ports:
       - "3000:3000"
     depends_on:
       - postgres
+      - loki
+      - prometheus   # Add Prometheus as a dependency
+    volumes:
+      - grafana_data:/var/lib/grafana
     networks:
       - awx-network
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GF_SECURITY_ADMIN_PASSWORD}
+      - GF_LOGGER_LOKI_URL=${LOKI_URL}
+      - GF_DATASOURCE_PROMETHEUS_URL=http://prometheus:9090
+    labels:
+      - "com.docker.compose.project=grafana"
+      - "com.docker.compose.service=grafana"
 
   # Portainer service
   portainer:
     image: portainer/portainer-ce:latest
     container_name: portainer
+    env_file:
+      - .env
     ports:
       - "9000:9000"
     volumes:
@@ -26,16 +39,54 @@ services:
     networks:
       - awx-network
 
-  # PostgreSQL for Portainer (if required)
+  # PostgreSQL service
   postgres:
     image: postgres:latest
     container_name: postgres
-    environment:
-      POSTGRES_USER: portainer
-      POSTGRES_PASSWORD: portainer_pass
-      POSTGRES_DB: portainer_db
+    env_file:
+      - .env
     ports:
       - "5432:5432"
+    networks:
+      - awx-network
+
+  # PostgreSQL Exporter for Prometheus
+  postgres_exporter:
+    image: wrouesnel/postgres_exporter:latest
+    container_name: postgres_exporter
+    environment:
+      - DATA_SOURCE_NAME=postgresql://portainer:portainer_pass@postgres:5432/portainer_db
+    ports:
+      - "9187:9187"  # Expose the metrics on this port
+    networks:
+      - awx-network
+    depends_on:
+      - postgres
+
+  # Loki service for log aggregation
+  loki:
+    image: grafana/loki:2.8.2
+    container_name: loki
+    env_file:
+      - .env
+    ports:
+      - "3100:3100"
+    networks:
+      - awx-network
+    volumes:
+      - loki_data:/loki
+    command:
+      - "-config.file=/etc/loki/local-config.yaml"
+
+  # Prometheus service for monitoring
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - prometheus_data:/prometheus
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
     networks:
       - awx-network
 
@@ -45,4 +96,6 @@ networks:
 
 volumes:
   portainer_data:
-
+  grafana_data:
+  loki_data:
+  prometheus_data:
