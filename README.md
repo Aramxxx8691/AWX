@@ -1,171 +1,140 @@
-# 📘 AWX + Portainer + Grafana Deployment Guide
-## 🧩 Summary
-This guide shows how to deploy AWX using Minikube, then integrate it with Portainer for Docker management and Grafana for system monitoring.
+# 🚀 Step-by-Step: Deploy AWX on Docker Desktop Kubernetes
+## 1. ✅ Prerequisites (you already have):
+Docker Desktop with Kubernetes enabled (✔️)
 
-For each new client, the process is:
-- Add the client to AWX
-- Launch the provisioning job
-- Connect client to Portainer
-- Add client metrics to Grafana (Prometheus)
+kubectl installed and working (✔️)
 
-## 🧰 Prerequisites
-- Ubuntu 22.04+
-Installed:
-- Docker
-- Minikube
-- kubectl
+Test with:
+```
+kubectl get nodes
+```
+Should return one node: docker-desktop.
 
-### 🚀 Step 1: Deploy AWX via Minikube
-1. Install Tools
+## 2. 🛠 Create the awx namespace
+
 ```
-sudo apt install docker.io kubectl minikube -y
+kubectl create namespace awx
 ```
-2. Start Minikube
+
+## 3. ⬇️ Clone the AWX Operator repo
 ```
-minikube start --driver=docker
+git clone https://github.com/ansible/awx-operator.git
+cd awx-operator
+git checkout 2.19.0
 ```
-3. Deploy AWX Operator
+
+## 4. 🚀 Deploy the AWX Operator
 ```
-kubectl apply -f https://github.com/ansible/awx-operator/releases/download/0.21.0/release-0.21.0.yaml
+make deploy NAMESPACE=awx
 ```
-4. Deploy AWX Instance
-Create awx-deploy.yaml:
+⚠️ This uses kustomize under the hood — it deploys Custom Resource Definitions (CRDs) and the AWX controller.
+
+## 5. 📦 Create your AWX deployment YAML
+Create a file called `awx-deploy.yaml` in the root of the project:
 ```
 apiVersion: awx.ansible.com/v1beta1
 kind: AWX
 metadata:
   name: awx-demo
+  namespace: awx
 spec:
-  service_type: NodePort
+  service_type: nodeport
   ingress_type: none
+  replicas: 1
   admin_user: admin
-  admin_password: admin
+  admin_password_secret: awx-admin-password
 ```
-Apply it:
+
+## 6. 🔐 Create the admin password secret
+```
+kubectl create secret generic awx-admin-password --from-literal=password=admin -n awx
+```
+
+## 7. 🚀 Apply your AWX deployment
 ```
 kubectl apply -f awx-deploy.yaml
 ```
-5. Get AWX URL
-```
-minikube service awx-demo --url
-```
-6. Login
-```
-Username: admin
-Password: admin
-```
 
-### 🐳 Step 2: Deploy Portainer Grafana + Prometheus (Optional)
-monitoring.yml
+## 8. 🌐 Access AWX Web Interface
+Get the NodePort:
 ```
-version: '3.8'
-
-services:
-  portainer:
-    image: portainer/portainer-ce:latest
-    ports:
-      - 9000:9000
-    volumes:
-      - portainer_data:/data
-      - /var/run/docker.sock:/var/run/docker.sock
-    deploy:
-      placement:
-        constraints: [node.role == manager]
-
-  grafana:
-    image: grafana/grafana:latest
-    ports:
-      - 3000:3000
-    volumes:
-      - grafana-storage:/var/lib/grafana
-    deploy:
-      placement:
-        constraints: [node.role == manager]
-
-volumes:
-  portainer_data:
-  grafana-storage:
+kubectl get svc -n awx
 ```
-
-#### Start:
+Look for awx-demo-service and find the NODEPORT, then open in browser:
 ```
-docker-compose -f monitoring.yaml up -d
+http://localhost:<NODEPORT>
 ```
+Login:
+- Username: admin
+- Password: admin
 
-#### Access:
-- portainer ➡️ http://localhost:9000
-- grafana ➡️ http://localhost:3000
-
+## 9. ⚙️ Other tools
 docker-compose.yml
 ```
-version: '3'
+version: "3.8"
 
 services:
-#  awx:
-#    image: ansible/awx:17.1.0
-#    ports:
-#      - "8052:8052"
-#    volumes:
-#      - ./awx_env/environment.sh:/etc/tower/conf.d/environment.sh
-#    depends_on:
-#      - awx_postgres
-#    restart: always
-
-  awx_postgres:
-    image: postgres:13
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
     environment:
-      POSTGRES_USER: awx
-      POSTGRES_PASSWORD: awxpass
-      POSTGRES_DB: awx
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    ports:
+      - "3000:3000"
+    depends_on:
+      - postgres
+    networks:
+      - awx-network
+
+  portainer:
+    image: portainer/portainer-ce:latest
+    container_name: portainer
+    ports:
+      - "9000:9000"
     volumes:
-      - pg_awx_data:/var/lib/postgresql/data
+      - /var/run/docker.sock:/var/run/docker.sock
+      - portainer_data:/data
+    networks:
+      - awx-network
+
+  postgres:
+    image: postgres:15
+    container_name: postgres
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: admin
+      POSTGRES_DB: awx
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - awx-network
 
   pgadmin:
-    image: dpage/pgadmin4:latest
-    ports:
-      - "8080:80"
+    image: dpage/pgadmin4
+    container_name: pgadmin
     environment:
       PGADMIN_DEFAULT_EMAIL: admin@admin.com
       PGADMIN_DEFAULT_PASSWORD: admin
-    volumes:
-      - pgadmin_data:/var/lib/pgadmin
+    ports:
+      - "5050:80"
     depends_on:
-      - awx_postgres
+      - postgres
+    networks:
+      - awx-network
 
 volumes:
-  pg_awx_data:
-  pgadmin_data:
+  portainer_data:
+  postgres_data:
+
+networks:
+  awx-network:
+    driver: bridge
 ```
 
-#### Start:
-```
-docker-compose up -d
-```
-
-### 👥 Step 4: Add a New Client
-
-1. In AWX
-- Create a new Inventory or add a host
-- Create or duplicate a Template
-- Add appropriate Credentials
-
-2. Launch AWX Job
-- Run the template to install required services (e.g., Docker, Prometheus Node Exporter)
-
-3. Connect to Portainer
-Since you’re using Docker Swarm:
-- Go to Portainer > Environments > Add Environment
-- Use remote Docker API or Swarm Agent to connect the new client’s Docker service to Portainer.
-
-4. Add Metrics to Grafana
-In prometheus.yml:
-```
-scrape_configs:
-  - job_name: 'clients'
-    static_configs:
-      - targets: ['<CLIENT_IP>:9100']
-```
-Restart Prometheus and add a new dashboard in Grafana (Node Exporter or custom).
-
-
-📎 Include Screenshots
+## 10. 🧭 Access After Running
+- AWX: http://localhost:<NODEPORT>
+- Grafana: http://localhost:3000
+- Portainer: http://localhost:9000
+- pgAdmin: http://localhost:5050
