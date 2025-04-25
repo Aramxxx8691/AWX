@@ -134,7 +134,7 @@ networks:
 ```
 
 ## 10. 🧭 Access After Running
-- AWX: http://localhost:<NODEPORT>
+- AWX: http://localhost:NODEPORT
 - Grafana: http://localhost:3000
 - Portainer: http://localhost:9000
 - pgAdmin: http://localhost:5050
