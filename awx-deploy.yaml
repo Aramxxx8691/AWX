@@ -1,0 +1,12 @@
+apiVersion: awx.ansible.com/v1beta1
+kind: AWX
+metadata:
+  name: awx-demo
+  namespace: awx
+spec:
+  service_type: nodeport
+  ingress_type: none
+  replicas: 1
+  admin_user: admin
+  admin_password_secret: awx-admin-password
+

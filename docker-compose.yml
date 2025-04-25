@@ -1,0 +1,48 @@
+version: "3.8"
+
+services:
+  # Grafana service
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    ports:
+      - "3000:3000"
+    depends_on:
+      - postgres
+    networks:
+      - awx-network
+
+  # Portainer service
+  portainer:
+    image: portainer/portainer-ce:latest
+    container_name: portainer
+    ports:
+      - "9000:9000"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - portainer_data:/data
+    networks:
+      - awx-network
+
+  # PostgreSQL for Portainer (if required)
+  postgres:
+    image: postgres:latest
+    container_name: postgres
+    environment:
+      POSTGRES_USER: portainer
+      POSTGRES_PASSWORD: portainer_pass
+      POSTGRES_DB: portainer_db
+    ports:
+      - "5432:5432"
+    networks:
+      - awx-network
+
+networks:
+  awx-network:
+    driver: bridge
+
+volumes:
+  portainer_data:
+
