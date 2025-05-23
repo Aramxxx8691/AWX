@@ -1,0 +1,6 @@
+- name: Test localhost connection
+  hosts: localhost
+  connection: local
+  tasks:
+    - name: Show hostname
+      command: hostname
