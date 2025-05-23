@@ -1,6 +1,7 @@
 - name: Test localhost connection
   hosts: localhost
   connection: local
+  gather_facts: false
   tasks:
     - name: Show hostname
       command: hostname
