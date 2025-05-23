@@ -9,4 +9,4 @@ spec:
   replicas: 1
   admin_user: admin
   admin_password_secret: awx-admin-password
-
+  metrics_port: 8052

@@ -1,0 +1,12 @@
+---
+- name: Deploy Nginx container with Docker
+  hosts: localhost
+  become: false
+  tasks:
+    - name: Run Nginx container
+      community.docker.docker_container:
+        name: my-nginx
+        image: nginx:latest
+        ports:
+          - "8080:80"
+        restart_policy: unless-stopped
